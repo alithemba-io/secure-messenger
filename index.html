@@ -1,0 +1,137 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Secure Messenger</title>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tailwindcss/2.2.19/tailwind.min.js"></script>
+</head>
+<body class="bg-gray-100 h-screen">
+    <div id="app" class="container mx-auto px-4 py-8 max-w-md">
+        <!-- Login/Register Section -->
+        <div id="auth-section" class="bg-white rounded-lg shadow p-6 mb-4">
+            <h2 class="text-2xl font-bold mb-4">Secure Messenger</h2>
+            <input type="text" id="username" placeholder="Username" class="w-full p-2 mb-2 border rounded">
+            <input type="password" id="password" placeholder="Password" class="w-full p-2 mb-4 border rounded">
+            <div class="flex space-x-2">
+                <button onclick="login()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600">Login</button>
+                <button onclick="register()" class="bg-green-500 text-white px-4 py-2 rounded hover:bg-green-600">Register</button>
+            </div>
+            <p id="auth-status" class="mt-2 text-red-500"></p>
+        </div>
+
+        <!-- Chat Section (initially hidden) -->
+        <div id="chat-section" class="hidden">
+            <div class="bg-white rounded-lg shadow p-6 mb-4">
+                <div id="messages" class="h-64 overflow-y-auto mb-4 p-2 border rounded"></div>
+                <input type="text" id="recipient" placeholder="Recipient username" class="w-full p-2 mb-2 border rounded">
+                <input type="text" id="message" placeholder="Type your message" class="w-full p-2 mb-2 border rounded">
+                <button onclick="sendMessage()" class="bg-blue-500 text-white px-4 py-2 rounded hover:bg-blue-600 w-full">Send</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let token = null;
+        const serverUrl = 'http://localhost:5000';  // Change this to your server IP
+
+        async function register() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${serverUrl}/register`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('auth-status').textContent = 'Registration successful! Please login.';
+                    document.getElementById('auth-status').className = 'mt-2 text-green-500';
+                } else {
+                    document.getElementById('auth-status').textContent = data.message;
+                }
+            } catch (error) {
+                document.getElementById('auth-status').textContent = 'Error connecting to server';
+            }
+        }
+
+        async function login() {
+            const username = document.getElementById('username').value;
+            const password = document.getElementById('password').value;
+            
+            try {
+                const response = await fetch(`${serverUrl}/login`, {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ username, password })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    token = data.token;
+                    document.getElementById('auth-section').classList.add('hidden');
+                    document.getElementById('chat-section').classList.remove('hidden');
+                    startMessagePolling();
+                } else {
+                    document.getElementById('auth-status').textContent = data.message;
+                }
+            } catch (error) {
+                document.getElementById('auth-status').textContent = 'Error connecting to server';
+            }
+        }
+
+        async function sendMessage() {
+            const recipient = document.getElementById('recipient').value;
+            const message = document.getElementById('message').value;
+            
+            try {
+                const response = await fetch(`${serverUrl}/send_message`, {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                        'Authorization': token
+                    },
+                    body: JSON.stringify({ recipient, message })
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    document.getElementById('message').value = '';
+                    updateMessages();
+                }
+            } catch (error) {
+                console.error('Error sending message:', error);
+            }
+        }
+
+        async function updateMessages() {
+            try {
+                const response = await fetch(`${serverUrl}/get_messages`, {
+                    headers: { 'Authorization': token }
+                });
+                const data = await response.json();
+                
+                if (data.status === 'success') {
+                    const messagesDiv = document.getElementById('messages');
+                    messagesDiv.innerHTML = data.messages
+                        .map(msg => `<div class="mb-2">
+                            <span class="font-bold">${msg.sender}:</span> 
+                            <span>${msg.message}</span>
+                        </div>`)
+                        .join('');
+                    messagesDiv.scrollTop = messagesDiv.scrollHeight;
+                }
+            } catch (error) {
+                console.error('Error updating messages:', error);
+            }
+        }
+
+        function startMessagePolling() {
+            updateMessages();
+            setInterval(updateMessages, 5000);
+        }
+    </script>
+</body>
+</html>
