@@ -338,12 +338,20 @@ class ChatApp(App):
         await loop.run_in_executor(None, self._sync_connect)
 
     def _sync_connect(self) -> None:
-        self.sio.connect(
-            SERVER_URL,
-            auth={"token": self._token},
-            transports=["websocket"],
-            wait_timeout=10,
-        )
+        try:
+            self.sio.connect(
+                SERVER_URL,
+                auth={"token": self._token},
+                transports=["websocket", "polling"],
+                wait_timeout=10,
+            )
+        except Exception as exc:
+            self.call_from_thread(
+                self._sys_msg,
+                f"[red]Connection failed: {exc}[/red]\n"
+                "  Check that the server is running and reachable.",
+            )
+            return
         self.sio.emit("list_my_channels")
 
     # ------------------------------------------------------------------
@@ -368,10 +376,16 @@ class ChatApp(App):
         def _on_channel_created(data):
             cid  = data["channel_id"]
             name = data["name"]
+            # Store the pending channel key now that we have the real channel_id
+            if hasattr(self, "_pending_channel_key") and self._pending_channel_key:
+                crypto.store_channel_key(cid, self._pending_channel_key, self._password)
+                self._pending_channel_key = None
             self._channels[cid] = name
             self.call_from_thread(self._update_channel_list,
                                   [{"id": k, "name": v} for k, v in self._channels.items()])
             self.call_from_thread(self._sys_msg, f"Channel #{name} created.")
+            # Auto-join the new channel
+            self.sio.emit("join_channel", {"channel_id": cid})
 
         @sio.on("channel_joined")
         def _on_channel_joined(data):

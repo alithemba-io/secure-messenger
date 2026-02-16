@@ -256,8 +256,13 @@ def _is_member(db: sqlite3.Connection, channel_id: str, user_id: str) -> bool:
 # ---------------------------------------------------------------------------
 
 @socketio.on("connect")
-def on_connect():
-    token = request.args.get("token", "")
+def on_connect(auth=None):
+    # Token can arrive via auth dict (client.py) or query param (security_audit.py)
+    token = ""
+    if auth and isinstance(auth, dict):
+        token = auth.get("token", "")
+    if not token:
+        token = request.args.get("token", "")
     payload = verify_token(token)
     if not payload:
         return False  # reject
